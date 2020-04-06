@@ -1,0 +1,62 @@
+library(knitr)
+opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(grid)
+library(gridExtra)
+
+rm(list=ls()) 
+if(!file.exists("./week4")){dir.create("./week4")}
+fileUrl  = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+fileDest = "./week4/repdata-data-StormData.csv.bz2"
+if(!file.exists(fileDest))
+{
+        download.file(fileUrl, fileDest)
+}
+if(!exists("projectData")){projectData <- read.csv(bzfile(fileDest))}
+
+fatalitiesData <- subset(projectData, FATALITIES > 0)
+injuriesData   <- subset(projectData, INJURIES > 0)
+fatalitiesSum  <- aggregate(FATALITIES ~ EVTYPE, fatalitiesData, sum, na.rm = TRUE)
+injuriesSum    <- aggregate(INJURIES ~ EVTYPE, injuriesData, sum, na.rm = TRUE)
+fatalitiesSum  <- fatalitiesSum[order(fatalitiesSum$FATALITIES, decreasing = TRUE),]
+injuriesSum    <- injuriesSum[order(injuriesSum$INJURIES, decreasing = TRUE),]
+
+economyData              <- subset(projectData, PROPDMG > 0 | CROPDMG > 0)
+economyData$PROPDMGEXP   <- sub("h|H", "2", economyData$PROPDMGEXP)
+economyData$PROPDMGEXP   <- sub("k|K", "3", economyData$PROPDMGEXP)
+economyData$PROPDMGEXP   <- sub("m|M", "6", economyData$PROPDMGEXP)
+economyData$PROPDMGEXP   <- sub("b|B", "9", economyData$PROPDMGEXP)
+economyData$CROPDMGEXP   <- sub("h|H", "2", economyData$CROPDMGEXP)
+economyData$CROPDMGEXP   <- sub("k|K", "3", economyData$CROPDMGEXP)
+economyData$CROPDMGEXP   <- sub("m|M", "6", economyData$CROPDMGEXP)
+economyData$CROPDMGEXP   <- sub("b|B", "9", economyData$CROPDMGEXP)
+economyData$propDMGQuant <- as.numeric(economyData$PROPDMG) * 10 ^ as.numeric(economyData$PROPDMGEXP)
+economyData$totalLoss    <- economyData$propDMGQuant + economyData$cropDMGQuant
+economySum                <- aggregate(totalLoss ~ EVTYPE, economyData, sum, na.rm = TRUE)
+economySum                <- economySum[order(economySum$totalLoss, decreasing = TRUE),]
+economySum$totalLoss    <- economySum$totalLoss/10e6
+
+fatalPlot <- ggplot(data=head(fatalitiesSum,10), aes(x=reorder(EVTYPE, -FATALITIES), y=FATALITIES)) +
+   geom_bar(fill="goldenrod",stat="identity")  +  
+    ylab("Total number of fatalities") + xlab("Event type") +
+    theme(legend.position="none") + theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1))
+    
+injPlot <- ggplot(data=head(injuriesSum,10), aes(x=reorder(EVTYPE, -INJURIES), y=INJURIES)) +
+   geom_bar(fill="darkblue",stat="identity")  +  
+    ylab("Total number of injuries") + xlab("Event type") +
+    theme(legend.position="none") + theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1))
+
+pushViewport(viewport(layout = grid.layout(2, 2, heights = unit(c(1, 4), "null"))))   
+grid.text("Ten Most Health-Influening Weather Events in the US", vp = viewport(layout.pos.row = 1, 
+layout.pos.col = 1:2))
+print(fatalPlot, vp = viewport(layout.pos.row = 2, layout.pos.col = 1))
+print(injPlot, vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
+economyPlot <- ggplot(data=head(economySum,10), aes(x=reorder(EVTYPE, -totalLoss), y=totalLoss)) +
+   geom_bar(fill="darkblue",stat="identity")  +  
+   ylab("Loss (1M USD)") + xlab("Event type") +
+   theme(legend.position="none") + theme(axis.text.x = element_text(size = 5, angle = 45, hjust = 1)) +
+   ggtitle("Ten Most Economically Influential Weather Events in the US")
+
+grid.arrange(economyPlot, ncol = 1, nrow = 1)
+
